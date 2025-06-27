@@ -207,7 +207,7 @@ class CodeRunRatingScraper:
             raise ValueError("DataFrame пуст, нечего сохранять.")
 
         filename = filename or ParserConfig.DEFAULT_FILENAME
-        file_format = file_format or ParserConfig.DEFAULT_SAVE_FORMAT
+        file_format = file_format or ParserConfig.DEFAULT_FILE_FORMAT
 
         if file_format.lower() == 'csv':
             full_filename = f"{filename}.csv"
@@ -219,3 +219,41 @@ class CodeRunRatingScraper:
             print(f"✅ Данные сохранены в Excel: {full_filename}")
         else:
             raise ValueError(f"Неподдерживаемый формат файла: {file_format}")
+    def load(
+        self,
+        filename: str = None,
+        file_format: str = None,
+        encoding: str = 'utf-8-sig'
+    ) -> None:
+        """
+        Загружает данные из файла и восстанавливает состояние объекта.
+        
+        Args:
+            filename: Имя файла (без расширения)
+            file_format: Формат файла ('csv' или 'excel')
+            encoding: Кодировка для CSV файлов
+            
+        Raises:
+            ValueError: Если файл не найден или данные не могут быть загружены
+            FileNotFoundError: Если указанный файл не существует
+        """
+        filename = filename or ParserConfig.DEFAULT_FILENAME
+        file_format = file_format or ParserConfig.DEFAULT_FILE_FORMAT
+        
+        if file_format.lower() == 'csv':
+            full_filename = f"{filename}.csv"
+            try:
+                self.df = pd.read_csv(full_filename, encoding=encoding)
+            except UnicodeDecodeError:
+                self.df = pd.read_csv(full_filename, encoding='utf-8')
+        elif file_format.lower() in ('excel', 'xlsx'):
+            full_filename = f"{filename}.xlsx"
+            self.df = pd.read_excel(full_filename)
+        else:
+            raise ValueError(f"Неподдерживаемый формат файла: {file_format}")
+        
+        if self.df.empty:
+            raise ValueError("Загруженный DataFrame пуст. Возможно, файл поврежден.")
+        
+        self._last_update = datetime.now()
+        print(f"✅ Данные успешно загружены из {full_filename}")

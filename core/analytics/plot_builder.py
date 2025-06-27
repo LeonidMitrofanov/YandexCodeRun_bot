@@ -78,32 +78,26 @@ class PlotBuilder:
             ValueError: Если нет данных для построения диаграммы
         """
         language_counts = {}
-        
         for col in df.columns:
             if col.startswith('Баллы_'):
                 language = col.split('_')[1]
                 language_counts[language] = (df[col] > 0).sum()
         
         language_counts = {lang: count for lang, count in language_counts.items() if count > 0}
-        
         if not language_counts:
             raise ValueError("Нет данных для построения диаграммы - все участники имеют нулевые баллы по всем языкам")
         
         languages = list(language_counts.keys())
         counts = list(language_counts.values())
         sorted_languages, sorted_counts = zip(*sorted(zip(languages, counts), key=lambda x: x[1], reverse=True))
-
         fig, ax = plt.subplots(figsize=(12, 6))
         
-        # Используем seaborn barplot
         ax = sns.barplot(x=list(sorted_languages), 
                         y=list(sorted_counts), 
                         hue=list(sorted_languages),
                         palette='viridis',
                         legend=False,
                         ax=ax)
-        
-        # Добавляем подписи значений
         for p in ax.patches:
             ax.annotate(f'{int(p.get_height())}', 
                         (p.get_x() + p.get_width() / 2., p.get_height()),
@@ -115,8 +109,68 @@ class PlotBuilder:
         ax.set_xlabel('Языки программирования', fontsize=12)
         ax.set_ylabel('Количество участников', fontsize=12)
         ax.grid(axis='y', linestyle='--', alpha=0.7)
-        
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
         
+        return fig
+    
+    @staticmethod
+    def plot_languages_per_user_distribution(df: pd.DataFrame) -> plt.Figure:
+        """Строит столбчатую диаграмму распределения количества языков программирования,
+        на которых пишет один участник (по наличию положительных баллов).
+        
+        Args:
+            df: Исходный DataFrame с данными участников
+            
+        Returns:
+            Figure: Объект matplotlib Figure с построенной диаграммой
+            
+        Raises:
+            ValueError: Если нет данных для построения диаграммы
+        """
+        language_columns = [col for col in df.columns if col.startswith('Баллы_')]
+        user_data = df.groupby('Участник')[language_columns].first()
+        user_language_counts = (user_data > 0).sum(axis=1)
+        language_distribution = user_language_counts.value_counts().sort_index()
+        if language_distribution.empty:
+            raise ValueError("Нет данных для построения диаграммы - ни один участник не имеет положительных баллов")
+        
+        total_participants = len(user_data)  # Общее количество участников
+        num_languages = language_distribution.index.tolist()
+        user_counts = language_distribution.values.tolist()
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax = sns.barplot(x=list(num_languages), 
+                        y=list(user_counts), 
+                        hue=list(num_languages),
+                        palette='viridis',
+                        legend=False,
+                        ax=ax)
+        
+        # Добавляем аннотацию с общим количеством участников
+        ax.annotate(f'Всего участников: {total_participants}',
+                   xy=(0.95, 0.95),
+                   xycoords='axes fraction',
+                   ha='right',
+                   va='top',
+                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
+                   fontsize=12)
+        
+        for p in ax.patches:
+            ax.annotate(
+                f'{int(p.get_height())}',
+                (p.get_x() + p.get_width() / 2., p.get_height()),
+                ha='center', va='center',
+                xytext=(0, 5),
+                textcoords='offset points',
+                fontsize=10
+            )
+        
+        ax.set_title('Распределение участников по количеству используемых языков', 
+                    pad=20, fontsize=14, fontweight='bold')
+        ax.set_xlabel('Количество языков программирования', fontsize=12)
+        ax.set_ylabel('Количество участников', fontsize=12)
+        ax.grid(axis='y', linestyle='--', alpha=0.7)
+        
+        plt.tight_layout()
         return fig
