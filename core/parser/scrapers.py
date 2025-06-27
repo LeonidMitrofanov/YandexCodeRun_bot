@@ -4,6 +4,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+from .exceptions import *
 from .config import ParserConfig
 
 
@@ -28,7 +29,8 @@ class CodeRunRatingScraper:
         self.df = pd.DataFrame()
         self._last_update: Optional[datetime] = None
         self._session: Optional[aiohttp.ClientSession] = None
-        self._lock = asyncio.Lock()  # Для защиты от параллельных обновлений
+        self._lock = asyncio.Lock()
+        self._is_updating = False
 
     @property
     def last_update(self) -> Optional[datetime]:
@@ -104,7 +106,7 @@ class CodeRunRatingScraper:
                     return await response.text()
             except Exception as e:
                 if attempt == self.max_retries - 1:
-                    raise
+                    raise NetworkError(f"Не удалось загрузить страницу {page} для языка {language} после {self.max_retries} попыток: {str(e)}")
                 await asyncio.sleep(self.delay * 2)
 
     async def _collect_language_stats(self, language: str) -> List[Dict[str, Any]]:
@@ -116,8 +118,13 @@ class CodeRunRatingScraper:
             soup = BeautifulSoup(html, 'html.parser')
             total_pages = self._get_total_pages(soup)
             
-            print(f"[{language}] Обнаружено страниц: {total_pages}")
-            all_data.extend(self._parse_table(soup, language))
+            if total_pages <= 0:
+                raise DataCollectionError(language, "Не удалось определить количество страниц")
+                
+            page_data = self._parse_table(soup, language)
+            if not page_data:
+                raise EmptyDataError(f"Нет данных на первой странице для языка {language}")
+            all_data.extend(page_data)
 
             tasks = []
             for page in range(2, total_pages + 1):
@@ -126,13 +133,18 @@ class CodeRunRatingScraper:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for result in results:
                 if isinstance(result, Exception):
-                    print(f"[{language}] Ошибка при обработке страницы: {result}")
-                else:
-                    all_data.extend(result)
+                    raise PageProcessingError(language, message=str(result))
+                if not result:
+                    raise EmptyDataError(f"Нет данных на странице {page} для языка {language}")
+                all_data.extend(result)
                 
         except Exception as e:
-            print(f"[{language}] ❌ Ошибка при сборе статистики: {e}")
-            return []
+            if not isinstance(e, ScraperError):
+                raise DataCollectionError(language, str(e))
+            raise
+            
+        if not all_data:
+            raise EmptyDataError(f"Не удалось собрать данные для языка {language}")
             
         return all_data
 
@@ -151,23 +163,31 @@ class CodeRunRatingScraper:
 
     async def update(self) -> None:
         """Асинхронно обновляет данные рейтинга по всем языкам."""
-        async with self._lock:  # Защита от параллельных вызовов
-            all_results = []
+        if self._is_updating:
+            raise UpdateInProgressError()
             
-            for lang in self.languages:
-                print(f"⏳ Обработка языка: {lang}")
-                lang_data = await self._collect_language_stats(lang)
-                all_results.extend(lang_data)
+        self._is_updating = True
+        try:
+            async with self._lock:
+                all_results = []
+                
+                for lang in self.languages:
+                    try:
+                        lang_data = await self._collect_language_stats(lang)
+                        all_results.extend(lang_data)
+                    except DataCollectionError as e:
+                        raise DataCollectionError(f"Не удалось обработать язык {lang}: {str(e)}")
 
-            if not all_results:
-                print("⚠️ Нет данных для построения DataFrame.")
-                self.df = pd.DataFrame()
-                self._last_update = None
-                return
+                if not all_results:
+                    raise EmptyDataError("Нет данных для построения DataFrame")
+                    
+                self.df = pd.DataFrame(all_results)
+                self._last_update = datetime.now()
+        finally:
+            self._is_updating = False
 
-            self.df = pd.DataFrame(all_results)
-            self._last_update = datetime.now()
-            print(f"✅ Данные обновлены ({self._last_update.isoformat()}), всего записей: {len(self.df)}")
+
+
 
     def save(
         self,
