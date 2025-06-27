@@ -1,10 +1,11 @@
-import time
-import requests
+import asyncio
+import aiohttp
 import pandas as pd
 from bs4 import BeautifulSoup
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from .config import ParserConfig
+
 
 class CodeRunRatingScraper:
     def __init__(
@@ -14,7 +15,7 @@ class CodeRunRatingScraper:
         max_retries: Optional[int] = None
     ):
         """
-        Инициализация парсера рейтинга CodeRun.
+        Асинхронный парсер рейтинга CodeRun.
         
         Args:
             languages: Список языков программирования для парсинга
@@ -26,11 +27,27 @@ class CodeRunRatingScraper:
         self.max_retries = max_retries or ParserConfig.MAX_RETRIES
         self.df = pd.DataFrame()
         self._last_update: Optional[datetime] = None
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._lock = asyncio.Lock()  # Для защиты от параллельных обновлений
 
     @property
     def last_update(self) -> Optional[datetime]:
         """Возвращает время последнего успешного обновления данных."""
         return self._last_update
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Создает или возвращает существующую сессию."""
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(
+                headers=ParserConfig.get_headers(),
+                timeout=aiohttp.ClientTimeout(total=ParserConfig.REQUEST_TIMEOUT)
+            )
+        return self._session
+
+    async def close(self) -> None:
+        """Закрывает HTTP-сессию."""
+        if self._session and not self._session.closed:
+            await self._session.close()
 
     def _get_total_pages(self, soup: BeautifulSoup) -> int:
         """Определяет общее количество страниц с рейтингом."""
@@ -71,79 +88,86 @@ class CodeRunRatingScraper:
             })
         return data
 
-    def _collect_language_stats(self, language: str) -> List[Dict[str, Any]]:
-        """Собирает статистику по всем страницам для указанного языка."""
-        all_data = []
-        params = {"language": language, "currentPage": 1}
-
+    async def _fetch_page(self, language: str, page: int) -> str:
+        """Асинхронно загружает страницу."""
+        session = await self._get_session()
+        params = {"language": language, "currentPage": page}
+        
         for attempt in range(self.max_retries):
             try:
-                response = requests.get(
+                async with session.get(
                     ParserConfig.BASE_URL,
                     params=params,
-                    headers=ParserConfig.get_headers(),
-                    timeout=ParserConfig.REQUEST_TIMEOUT
-                )
-                response.raise_for_status()
-                soup = BeautifulSoup(response.text, 'html.parser')
-                total_pages = self._get_total_pages(soup)
-                break
+                    ssl=False
+                ) as response:
+                    response.raise_for_status()
+                    return await response.text()
             except Exception as e:
                 if attempt == self.max_retries - 1:
-                    print(f"[{language}] ❌ Ошибка при загрузке первой страницы: {e}")
-                    return []
-                time.sleep(self.delay * 2)
+                    raise
+                await asyncio.sleep(self.delay * 2)
 
-        print(f"[{language}] Обнаружено страниц: {total_pages}")
-        all_data.extend(self._parse_table(soup, language))
-
-        for page in range(2, total_pages + 1):
-            print(f"[{language}] Загружается страница {page}...")
-            params = {"language": language, "currentPage": page}
+    async def _collect_language_stats(self, language: str) -> List[Dict[str, Any]]:
+        """Асинхронно собирает статистику по всем страницам для указанного языка."""
+        all_data = []
+        
+        try:
+            html = await self._fetch_page(language, 1)
+            soup = BeautifulSoup(html, 'html.parser')
+            total_pages = self._get_total_pages(soup)
             
-            for attempt in range(self.max_retries):
-                try:
-                    response = requests.get(
-                        ParserConfig.BASE_URL,
-                        params=params,
-                        headers=ParserConfig.get_headers(),
-                        timeout=ParserConfig.REQUEST_TIMEOUT
-                    )
-                    response.raise_for_status()
-                    soup = BeautifulSoup(response.text, 'html.parser')
-                    all_data.extend(self._parse_table(soup, language))
-                    break
-                except Exception as e:
-                    if attempt == self.max_retries - 1:
-                        print(f"[{language}] ❌ Ошибка на странице {page}: {e}")
-                        return all_data
-                    time.sleep(self.delay * 2)
+            print(f"[{language}] Обнаружено страниц: {total_pages}")
+            all_data.extend(self._parse_table(soup, language))
 
-            time.sleep(self.delay)
-
+            tasks = []
+            for page in range(2, total_pages + 1):
+                tasks.append(self._process_page(language, page))
+                
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    print(f"[{language}] Ошибка при обработке страницы: {result}")
+                else:
+                    all_data.extend(result)
+                
+        except Exception as e:
+            print(f"[{language}] ❌ Ошибка при сборе статистики: {e}")
+            return []
+            
         return all_data
+
+    async def _process_page(self, language: str, page: int) -> List[Dict[str, Any]]:
+        """Обрабатывает одну страницу."""
+        print(f"[{language}] Загружается страница {page}...")
+        await asyncio.sleep(self.delay)  # Задержка между запросами
+        
+        html = await self._fetch_page(language, page)
+        soup = BeautifulSoup(html, 'html.parser')
+        return self._parse_table(soup, language)
 
     def get_data(self) -> pd.DataFrame:
         """Возвращает текущий DataFrame с рейтингом."""
         return self.df.copy()
 
-    def update(self) -> None:
-        """Обновляет данные рейтинга по всем языкам."""
-        all_results = []
-        for lang in self.languages:
-            print(f"⏳ Обработка языка: {lang}")
-            lang_data = self._collect_language_stats(lang)
-            all_results.extend(lang_data)
+    async def update(self) -> None:
+        """Асинхронно обновляет данные рейтинга по всем языкам."""
+        async with self._lock:  # Защита от параллельных вызовов
+            all_results = []
+            
+            for lang in self.languages:
+                print(f"⏳ Обработка языка: {lang}")
+                lang_data = await self._collect_language_stats(lang)
+                all_results.extend(lang_data)
 
-        if not all_results:
-            print("⚠️ Нет данных для построения DataFrame.")
-            self.df = pd.DataFrame()
-            self._last_update = None
-            return
+            if not all_results:
+                print("⚠️ Нет данных для построения DataFrame.")
+                self.df = pd.DataFrame()
+                self._last_update = None
+                return
 
-        self.df = pd.DataFrame(all_results)
-        self._last_update = datetime.now()
-        print(f"✅ Данные обновлены ({self._last_update.isoformat()}), всего записей: {len(self.df)}")
+            self.df = pd.DataFrame(all_results)
+            self._last_update = datetime.now()
+            print(f"✅ Данные обновлены ({self._last_update.isoformat()}), всего записей: {len(self.df)}")
 
     def save(
         self,
