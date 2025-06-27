@@ -3,8 +3,12 @@ name = "CodeRun_stat_bot"
 version = "0.1.0"
 description = "Telegram bot for CodeRun Boost Challenge statistics"
 authors = [
-    { name = "Mitrofanov Leonid" }
+    { name = "Mitrofanov Leonid", email = "alforfon@bk.ru" }
 ]
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+
 dependencies = [
     "aiogram>=3.0,<4.0",
     "python-dotenv>=1.0.0",
@@ -14,3 +18,10 @@ dependencies = [
     "matplotlib>=3.10.0",
     "seaborn>=0.13.0"
 ]
+
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["core"]

@@ -8,6 +8,10 @@ core/*.env
 __pycache__/
 *.py[cod]
 
+# Файлы сборки
+core/build
+core/*.egg-info
+
 # Данные и артефакты (из storage/)
 core/storage/data/*
 core/storage/plots/*
