@@ -1,1 +1,13 @@
-*/.env
+# Виртуальное окружение
+.venv/
+
+# Игнорировать реальный .env (с секретами)
+core/*.env
+
+# Питоновские кэш-файлы
+__pycache__/
+*.py[cod]
+
+# Данные и артефакты (из storage/)
+core/storage/data/*
+core/storage/plots/*
