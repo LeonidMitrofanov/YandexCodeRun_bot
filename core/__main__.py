@@ -1,4 +1,4 @@
-from core.bot import dp, bot, register_commands
+from .bot import dp, bot, register_commands
 import asyncio
 
 async def main():

@@ -4,7 +4,7 @@ import pandas as pd
 import time
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from parser.config import ParserConfig
+from .config import ParserConfig
 
 class CodeRunRatingScraper:
     def __init__(
