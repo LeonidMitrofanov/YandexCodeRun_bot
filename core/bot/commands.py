@@ -1,7 +1,10 @@
-from aiogram import Router, types, F
+from aiogram import Router, types
 from aiogram.filters import Command
+from core.parser import CodeRunRatingScraper
+from core.analytics import StatsCalculator, PlotBuilder
 from .keyboards import help_keyboard
 
+scraper = CodeRunRatingScraper()
 router = Router()
 
 @router.message(Command("start"))
@@ -53,6 +56,15 @@ async def cmd_task(message: types.Message):
         await message.answer("Пожалуйста, укажите номер задачи: /task <номер>")
         return
     await message.answer(f"Статистика по задаче {task_id}")
+
+@router.message(Command("update"))
+async def cmd_lang_distr(message: types.Message):
+    await scraper.update()
+    await message.answer(f"Данные обновлены ({scraper.last_update})")
+
+@router.message(Command("lang_distr"))
+async def cmd_lang_distr(message: types.Message):
+    await message.answer(f"Распределение участников по языкам: ")
 
 def register_commands(dp):
     dp.include_router(router)
