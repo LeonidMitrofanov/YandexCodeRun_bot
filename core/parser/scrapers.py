@@ -1,7 +1,7 @@
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
 import time
+import requests
+import pandas as pd
+from bs4 import BeautifulSoup
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from .config import ParserConfig
