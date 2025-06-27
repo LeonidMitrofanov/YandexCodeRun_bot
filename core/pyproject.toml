@@ -1,0 +1,11 @@
+[project]
+name = "CodeRun_stat_bot"
+version = "0.1.0"
+description = "Telegram bot for CodeRun Boost Challenge statistics"
+authors = [
+    { name = "Mitrofanov Leonid", telegram = "@alforfon_chik" }
+]
+dependencies = [
+    "aiogram>=3.0,<4.0",
+    "python-dotenv>=1.0.0"
+]
