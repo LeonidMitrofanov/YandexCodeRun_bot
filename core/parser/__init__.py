@@ -1,3 +1,2 @@
-# Инициализация модуля parser
-
+from . import exceptions
 from .scrapers import CodeRunRatingScraper
