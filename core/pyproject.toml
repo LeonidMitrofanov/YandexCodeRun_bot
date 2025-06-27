@@ -3,7 +3,7 @@ name = "CodeRun_stat_bot"
 version = "0.1.0"
 description = "Telegram bot for CodeRun Boost Challenge statistics"
 authors = [
-    { name = "Mitrofanov Leonid", telegram = "@alforfon_chik" }
+    { name = "Mitrofanov Leonid" }
 ]
 dependencies = [
     "aiogram>=3.0,<4.0",
