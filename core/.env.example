@@ -1,0 +1,1 @@
+BOT_TOKEN=your_actual_bot_token_here
