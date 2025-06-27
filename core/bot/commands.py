@@ -6,6 +6,7 @@ from core.parser import CodeRunRatingScraper
 from core.parser.exceptions import *
 from core.analytics import StatsCalculator, PlotBuilder
 from .texts.commands import CommandTexts
+from .texts.info import InfoText
 from .keyboards import help_keyboard
 from .config import BotConfig
 
@@ -50,6 +51,10 @@ async def cmd_update(message: types.Message):
         await message.answer(f"❌ Ошибка при обновлении данных: {str(e)}")
     except Exception as e:
         await message.answer(f"❌ Неизвестная ошибка: {str(e)}")
+
+@router.message(Command("contact"))
+async def cmd_contact(message: types.Message):
+    await message.answer(InfoText.contact_text)
 
 @router.message(Command("user_by_lang"))
 async def cmd_lang_distr(message: types.Message):
