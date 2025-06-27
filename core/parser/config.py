@@ -18,7 +18,7 @@ class ParserConfig:
         'kotlin', 'swift', 'go', 'rust', 'dart', 'pascal'
     ]
     
-    DEFAULT_SAVE_FORMAT: str = 'csv'  # 'csv' или 'excel'
+    DEFAULT_FILE_FORMAT: str = 'csv'  # 'csv' или 'excel'
     DEFAULT_FILENAME: str = 'yandex_coderun_rating'
     
     @classmethod

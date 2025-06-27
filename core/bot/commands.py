@@ -1,4 +1,4 @@
-from aiogram import Router, types
+from aiogram import Dispatcher, Router, types
 from aiogram.filters import Command
 from io import BytesIO
 from matplotlib import pyplot as plt
@@ -7,9 +7,19 @@ from core.parser.exceptions import *
 from core.analytics import StatsCalculator, PlotBuilder
 from .texts.commands import CommandTexts
 from .keyboards import help_keyboard
+from .config import BotConfig
 
 scraper = CodeRunRatingScraper()
 router = Router()
+
+async def on_startup(dispatcher: Dispatcher):
+    try:
+        scraper.load(BotConfig.PATH_TO_DATA)
+        print(f"✅ Данные успешно загружены из файла ({scraper.last_update})")
+    except FileNotFoundError:
+        print("ℹ️ Файл с данными не найден, будет создан при первом обновлении")
+    except Exception as e:
+        print(f"⚠️ Ошибка при загрузке данных: {e}")
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -33,6 +43,7 @@ async def cmd_update(message: types.Message):
     try:
         progress_msg = await message.answer("⏳ Парсим данные...")
         await scraper.update()
+        scraper.save(BotConfig.PATH_TO_DATA)
         await message.answer(f"✅ Данные обновлены ({scraper.last_update})")
         await progress_msg.delete()
     except DataCollectionError as e:
@@ -40,7 +51,7 @@ async def cmd_update(message: types.Message):
     except Exception as e:
         await message.answer(f"❌ Неизвестная ошибка: {str(e)}")
 
-@router.message(Command("lang_distr"))
+@router.message(Command("user_by_lang"))
 async def cmd_lang_distr(message: types.Message):
     try:
         df = scraper.get_data()
@@ -80,7 +91,44 @@ async def cmd_lang_distr(message: types.Message):
         await message.answer(f"❌ Ошибка: {str(e)}")
     except Exception as e:
         await message.answer(f"⚠️ Произошла непредвиденная ошибка: {str(e)}")
+    
+@router.message(Command("langcnt_by_user"))
+async def cmd_user_langs_distr(message: types.Message):
+    """
+    Отправляет диаграмму распределения участников по количеству используемых языков
+    """
+    try:
+        df = scraper.get_data()
+        if df.empty:
+            await message.answer("Нет данных для построения графиков\n"
+                            "Выполните /update")
+            return
 
+        progress_msg = await message.answer("⏳ Строим диаграмму...")
+        fig = PlotBuilder.plot_languages_per_user_distribution(df)
+        
+        def fig_to_bytes(fig: plt.Figure) -> bytes:
+            buf = BytesIO()
+            fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+            buf.seek(0)
+            plt.close(fig)
+            return buf.getvalue()
+        
+        image_bytes = fig_to_bytes(fig)
+        photo = types.BufferedInputFile(image_bytes, filename="user_langs_distr.png")
+        
+        await message.answer_photo(
+            photo=photo,
+            caption="📊 Распределение участников по количеству используемых языков"
+        )
+        
+        await progress_msg.delete()
+    
+    except ValueError as e:
+        await message.answer(f"❌ Ошибка: {str(e)}")
+    except Exception as e:
+        await message.answer(f"⚠️ Произошла непредвиденная ошибка: {str(e)}")
 
 def register_commands(dp):
+    dp.startup.register(on_startup)
     dp.include_router(router)
