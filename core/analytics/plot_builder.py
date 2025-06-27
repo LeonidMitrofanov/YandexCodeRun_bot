@@ -19,31 +19,48 @@ class PlotBuilder:
             ValueError: Если нет данных для построения диаграммы
         """
         language_counts = {}
-        
         for col in df.columns:
             if col.startswith('Баллы_'):
                 language = col.split('_')[1]
                 language_counts[language] = (df[col] > 0).sum()
         
         language_counts = {lang: count for lang, count in language_counts.items() if count > 0}
-        
         if not language_counts:
             raise ValueError("Нет данных для построения диаграммы - все участники имеют нулевые баллы по всем языкам")
         
-        languages = list(language_counts.keys())
-        counts = list(language_counts.values())
+        sorted_languages, sorted_counts = zip(*sorted(language_counts.items(), key=lambda x: x[1], reverse=True))
+        fig, ax = plt.subplots(figsize=(10, 8))
+        colors = sns.color_palette('viridis', len(sorted_languages))
         
-        fig = plt.figure(figsize=(10, 8))
-        plt.pie(
-            counts,
-            labels=languages,
+        # Визуальные улучшения:
+        explode = [0.03] * len(sorted_languages)  # небольшое отделение секторов
+        startangle = 90  # начальный угол для лучшего отображения
+        
+        wedges, texts, autotexts = ax.pie(
+            sorted_counts,
+            labels=sorted_languages,
             autopct='%1.1f%%',
-            startangle=140,
-            wedgeprops={'linewidth': 1, 'edgecolor': 'white'}
+            startangle=startangle,
+            colors=colors,
+            explode=explode,
+            textprops={'fontsize': 12},
+            pctdistance=0.85,
+            wedgeprops={'edgecolor': 'white', 'linewidth': 1}
         )
-        plt.title('Распределение участников по языкам программирования', pad=20)
-        plt.axis('equal')
-
+        
+        plt.setp(autotexts, size=10, weight='bold', color='white')
+        ax.set_title('Распределение участников по языкам программирования', 
+                    pad=20, fontsize=14, fontweight='bold')
+        
+        legend_labels = [f'{l} - {c} чел.' for l, c in zip(sorted_languages, sorted_counts)]
+        ax.legend(wedges, legend_labels,
+                title="Языки программирования",
+                loc="center left",
+                bbox_to_anchor=(1, 0, 0.5, 1),
+                fontsize=10)
+        
+        ax.axis('equal')
+        plt.tight_layout()
         return fig
     
     @staticmethod
@@ -74,15 +91,25 @@ class PlotBuilder:
         
         languages = list(language_counts.keys())
         counts = list(language_counts.values())
+        sorted_languages, sorted_counts = zip(*sorted(zip(languages, counts), key=lambda x: x[1], reverse=True))
 
         fig, ax = plt.subplots(figsize=(12, 6))
-        bars = ax.bar(languages, counts, color='skyblue', edgecolor='black')
         
-        for bar in bars:
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height,
-                    f'{int(height)}',
-                    ha='center', va='bottom')
+        # Используем seaborn barplot
+        ax = sns.barplot(x=list(sorted_languages), 
+                        y=list(sorted_counts), 
+                        hue=list(sorted_languages),
+                        palette='viridis',
+                        legend=False,
+                        ax=ax)
+        
+        # Добавляем подписи значений
+        for p in ax.patches:
+            ax.annotate(f'{int(p.get_height())}', 
+                        (p.get_x() + p.get_width() / 2., p.get_height()),
+                        ha='center', va='center', 
+                        xytext=(0, 5), 
+                        textcoords='offset points')
         
         ax.set_title('Распределение участников по языкам программирования', pad=20, fontsize=14)
         ax.set_xlabel('Языки программирования', fontsize=12)
