@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 from core.parser import CodeRunRatingScraper
 from core.parser.exceptions import *
 from core.analytics import StatsCalculator, PlotBuilder
+from .utils import *
 from .texts.commands import CommandTexts
 from .texts.info import InfoText
 from .keyboards import help_keyboard
@@ -46,12 +47,13 @@ async def cmd_update(message: types.Message):
         progress_msg = await message.answer("⏳ Парсим данные...")
         await scraper.update()
         scraper.save(BotConfig.PATH_TO_DATA)
-        await message.answer(f"✅ Данные обновлены ({scraper.last_update})")
+        formatted_date = format_date(scraper.last_update)
+        await message.answer(f"✅ Данные обновлены ({formatted_date})")
         await progress_msg.delete()
     except DataCollectionError as e:
         await message.answer(f"❌ Ошибка при обновлении данных: {str(e)}")
     except Exception as e:
-        await message.answer(f"❌ Неизвестная ошибка: {str(e)}")
+        await message.answer(f"⚠️ Неизвестная ошибка: {str(e)}")
 
 @router.message(Command("contact"))
 async def cmd_contact(message: types.Message):
@@ -96,7 +98,7 @@ async def cmd_lang_distr(message: types.Message):
     except ValueError as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
     except Exception as e:
-        await message.answer(f"⚠️ Произошла непредвиденная ошибка: {str(e)}")
+        await message.answer(f"⚠️ Неизвестная ошибка: {str(e)}")
     
 @router.message(Command("langcnt_by_user"))
 async def cmd_user_langs_distr(message: types.Message):
@@ -133,7 +135,7 @@ async def cmd_user_langs_distr(message: types.Message):
     except ValueError as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
     except Exception as e:
-        await message.answer(f"⚠️ Произошла непредвиденная ошибка: {str(e)}")
+        await message.answer(f"⚠️ Неизвестная ошибка: {str(e)}")
     
 @router.message(Command("user_stats"))
 async def cmd_user_stats(message: types.Message):
@@ -170,8 +172,7 @@ async def cmd_user_stats(message: types.Message):
                     )
 
         tasks = user_data['Задачи'].values[0]
-        last_update = user_data['Дата'].values[0]
-
+        last_update = format_date(user_data['Дата'].values[0])
         response.append(f"\n📌 Решено задач: {tasks}")
         response.append(f"🕒 Последнее решение: {last_update}")
         await message.answer("\n".join(response))
@@ -179,7 +180,7 @@ async def cmd_user_stats(message: types.Message):
     except IndexError:
         await message.answer("Укажите ник пользователя:\n/user_stats <ник>")
     except Exception as e:
-        await message.answer(f"⚠️ Ошибка: {str(e)}")
+        await message.answer(f"⚠️ Неизвестная ошибка: {str(e)}")
 
 def register_commands(dp):
     dp.startup.register(on_startup)
