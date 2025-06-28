@@ -1,3 +1,4 @@
+import pandas as pd
 from aiogram import Dispatcher, Router, types
 from aiogram.filters import Command
 from io import BytesIO
@@ -133,6 +134,52 @@ async def cmd_user_langs_distr(message: types.Message):
         await message.answer(f"❌ Ошибка: {str(e)}")
     except Exception as e:
         await message.answer(f"⚠️ Произошла непредвиденная ошибка: {str(e)}")
+    
+@router.message(Command("user_stats"))
+async def cmd_user_stats(message: types.Message):
+    """
+    Показывает статистику по конкретному пользователю
+    Использование: /user_stats <ник>
+    """
+    try:
+        username = message.text.split(maxsplit=1)[1].strip()
+        df = scraper.get_data()
+        
+        if df.empty:
+            await message.answer("Нет данных для анализа\nВыполните /update")
+            return
+
+        user_stats = StatsCalculator.group_by_user(df)
+        user_data = user_stats[user_stats['Участник'] == username]
+
+        if user_data.empty:
+            await message.answer(f"Пользователь {username} не найден")
+            return
+
+        response = [f"📊 Статистика для {username}:\n"]
+        
+        for col in user_data.columns:
+            if col.startswith('Баллы_'):
+                lang = col.split('_')[1]
+                points = user_data[col].values[0]
+                place = user_data[f'Место_{lang}'].values[0]
+                
+                if pd.notna(points):
+                    response.append(
+                        f"{lang.upper()}: {points} баллов (место {place})"
+                    )
+
+        tasks = user_data['Задачи'].values[0]
+        last_update = user_data['Дата'].values[0]
+
+        response.append(f"\n📌 Решено задач: {tasks}")
+        response.append(f"🕒 Последнее решение: {last_update}")
+        await message.answer("\n".join(response))
+
+    except IndexError:
+        await message.answer("Укажите ник пользователя:\n/user_stats <ник>")
+    except Exception as e:
+        await message.answer(f"⚠️ Ошибка: {str(e)}")
 
 def register_commands(dp):
     dp.startup.register(on_startup)
