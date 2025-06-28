@@ -20,14 +20,17 @@
    cd YandexCodeRun_bot
    ```
 
-2. Настройка виртуального окружения:
-```bash
-   python -m venv venv
-   # Для Linux/MacOS:
-   source venv/bin/activate
-   # Для Windows:
+2. Настройка виртуального окружения: (Опционально)
+- Для Linux/MacOS:
+   ```bash
+      python -m venv .venv
+      source venv/bin/activate
+   ```
+- Для Windows:
+   ```bash
+   python -m venv .venv
    venv\Scripts\activate
-```
+   ```
 
 3. Установить зависимости:
    ```bash
