@@ -189,12 +189,13 @@ async def cmd_user_stats(message: types.Message):
         other_languages = []
         
         for lang in languages:
-            if lang['place'] <= 10:
-                top_languages.append(lang)
-            elif lang['place'] <= 20:
-                good_languages.append(lang)
-            else:
-                other_languages.append(lang)
+            if lang['lang'] != 'Общий':
+                if lang['place'] <= 10:
+                    top_languages.append(lang)
+                elif lang['place'] <= 20:
+                    good_languages.append(lang)
+                else:
+                    other_languages.append(lang)
 
         # Формируем сообщение
         response = [
