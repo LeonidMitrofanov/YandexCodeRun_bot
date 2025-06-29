@@ -2,29 +2,28 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from .stats_calculator import StatsCalculator
+from .config import StatConfig
+from typing import Dict
 
 class PlotBuilder:
     @staticmethod
-    def plot_users_by_language_pie(df: pd.DataFrame) -> plt.Figure:
-        """Строит круговую диаграмму распределения участников по языкам программирования
-        на основе наличия баллов в колонках формата 'Баллы_<язык>'.
-        
-        Args:
-            df: DataFrame с данными участников, содержащий колонки с баллами по языкам
-            
-        Returns:
-            Figure: Объект matplotlib Figure с построенной диаграммой
-            
-        Raises:
-            ValueError: Если нет данных для построения диаграммы
-        """
+    def _get_language_counts(df: pd.DataFrame) -> Dict[str, int]:
+        """Вспомогательный метод для получения количества участников по языкам (исключая общий зачет)"""
         language_counts = {}
         for col in df.columns:
             if col.startswith('Баллы_'):
                 language = col.split('_')[1]
-                language_counts[language] = (df[col] > 0).sum()
-        
+                if language in StatConfig.LANGUAGES:  # Исключаем общий зачет
+                    language_counts[language] = (df[col] > 0).sum()
+        return language_counts
+
+    @staticmethod
+    def plot_users_by_language_pie(df: pd.DataFrame) -> plt.Figure:
+        """Строит круговую диаграмму распределения участников по языкам программирования
+        (исключая общий зачет)"""
+        language_counts = PlotBuilder._get_language_counts(df)
         language_counts = {lang: count for lang, count in language_counts.items() if count > 0}
+        
         if not language_counts:
             raise ValueError("Нет данных для построения диаграммы - все участники имеют нулевые баллы по всем языкам")
         
@@ -32,9 +31,8 @@ class PlotBuilder:
         fig, ax = plt.subplots(figsize=(10, 8))
         colors = sns.color_palette('viridis', len(sorted_languages))
         
-        # Визуальные улучшения:
-        explode = [0.03] * len(sorted_languages)  # небольшое отделение секторов
-        startangle = 90  # начальный угол для лучшего отображения
+        explode = [0.03] * len(sorted_languages)
+        startangle = 90
         
         wedges, texts, autotexts = ax.pie(
             sorted_counts,
@@ -66,30 +64,14 @@ class PlotBuilder:
     @staticmethod
     def plot_users_by_language_bar(df: pd.DataFrame) -> plt.Figure:
         """Строит столбчатую диаграмму распределения участников по языкам программирования
-        на основе наличия баллов в колонках формата 'Баллы_<язык>'.
-        
-        Args:
-            df: DataFrame с данными участников, содержащий колонки с баллами по языкам
-            
-        Returns:
-            Figure: Объект matplotlib Figure с построенной диаграммой
-            
-        Raises:
-            ValueError: Если нет данных для построения диаграммы
-        """
-        language_counts = {}
-        for col in df.columns:
-            if col.startswith('Баллы_'):
-                language = col.split('_')[1]
-                language_counts[language] = (df[col] > 0).sum()
-        
+        (исключая общий зачет)"""
+        language_counts = PlotBuilder._get_language_counts(df)
         language_counts = {lang: count for lang, count in language_counts.items() if count > 0}
+        
         if not language_counts:
             raise ValueError("Нет данных для построения диаграммы - все участники имеют нулевые баллы по всем языкам")
         
-        languages = list(language_counts.keys())
-        counts = list(language_counts.values())
-        sorted_languages, sorted_counts = zip(*sorted(zip(languages, counts), key=lambda x: x[1], reverse=True))
+        sorted_languages, sorted_counts = zip(*sorted(language_counts.items(), key=lambda x: x[1], reverse=True))
         fig, ax = plt.subplots(figsize=(12, 6))
         
         ax = sns.barplot(x=list(sorted_languages), 
@@ -117,25 +99,17 @@ class PlotBuilder:
     @staticmethod
     def plot_languages_per_user_distribution(df: pd.DataFrame) -> plt.Figure:
         """Строит столбчатую диаграмму распределения количества языков программирования,
-        на которых пишет один участник (по наличию положительных баллов).
-        
-        Args:
-            df: Исходный DataFrame с данными участников
-            
-        Returns:
-            Figure: Объект matplotlib Figure с построенной диаграммой
-            
-        Raises:
-            ValueError: Если нет данных для построения диаграммы
-        """
-        language_columns = [col for col in df.columns if col.startswith('Баллы_')]
+        на которых пишет один участник (исключая общий зачет)"""
+        language_columns = [col for col in df.columns 
+                          if col.startswith('Баллы_') and col.split('_')[1] in StatConfig.LANGUAGES]
         user_data = df.groupby('Участник')[language_columns].first()
         user_language_counts = (user_data > 0).sum(axis=1)
         language_distribution = user_language_counts.value_counts().sort_index()
+        
         if language_distribution.empty:
             raise ValueError("Нет данных для построения диаграммы - ни один участник не имеет положительных баллов")
         
-        total_participants = len(user_data)  # Общее количество участников
+        total_participants = len(user_data)
         num_languages = language_distribution.index.tolist()
         user_counts = language_distribution.values.tolist()
         
@@ -147,7 +121,6 @@ class PlotBuilder:
                         legend=False,
                         ax=ax)
         
-        # Добавляем аннотацию с общим количеством участников
         ax.annotate(f'Всего участников: {total_participants}',
                    xy=(0.95, 0.95),
                    xycoords='axes fraction',

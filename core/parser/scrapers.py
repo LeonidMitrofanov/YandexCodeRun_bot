@@ -13,7 +13,8 @@ class CodeRunRatingScraper:
         self,
         languages: Optional[List[str]] = None,
         delay: Optional[float] = None,
-        max_retries: Optional[int] = None
+        max_retries: Optional[int] = None,
+        include_general: bool = True
     ):
         """
         Асинхронный парсер рейтинга CodeRun.
@@ -22,10 +23,12 @@ class CodeRunRatingScraper:
             languages: Список языков программирования для парсинга
             delay: Задержка между запросами (в секундах)
             max_retries: Максимальное количество попыток повторного запроса
+            include_general: Включать ли общий зачет в парсинг
         """
         self.languages = languages or ParserConfig.get_languages()
         self.delay = delay or ParserConfig.DELAY_BETWEEN_REQUESTS
         self.max_retries = max_retries or ParserConfig.MAX_RETRIES
+        self.include_general = include_general
         self.df = pd.DataFrame()
         self._last_update: Optional[datetime] = None
         self._session: Optional[aiohttp.ClientSession] = None
@@ -60,8 +63,13 @@ class CodeRunRatingScraper:
                 return max(int(link.text) for link in page_links if link.text.isdigit())
         return 1
 
-    def _parse_table(self, soup: BeautifulSoup, language: str) -> List[Dict[str, Any]]:
-        """Парсит таблицу рейтинга для конкретного языка."""
+    def _parse_table(self, soup: BeautifulSoup, rating_type: str) -> List[Dict[str, Any]]:
+        """Парсит таблицу рейтинга для конкретного языка или общего зачета.
+        
+        Args:
+            soup: Объект BeautifulSoup с HTML страницы
+            rating_type: Тип рейтинга ('Общий' или язык программирования)
+        """
         table = soup.find('table', class_='RatingTable_rating-table__ixEUi')
         if not table:
             return []
@@ -84,16 +92,25 @@ class CodeRunRatingScraper:
             data.append({
                 'Участник': user,
                 'Задачи': tasks,
-                f'Место_{language}': rank,
-                f'Баллы_{language}': float(points.replace(',', '.')),
+                f'Место_{rating_type}': rank,
+                f'Баллы_{rating_type}': float(points.replace(',', '.')),
                 'Дата': date
             })
         return data
 
-    async def _fetch_page(self, language: str, page: int) -> str:
-        """Асинхронно загружает страницу."""
+    async def _fetch_page(self, rating_type: str, page: int) -> str:
+        """Асинхронно загружает страницу.
+        
+        Args:
+            rating_type: Тип рейтинга ('Общий' или язык программирования)
+            page: Номер страницы
+        """
         session = await self._get_session()
-        params = {"language": language, "currentPage": page}
+        params = {"currentPage": page}
+        
+        # Добавляем параметр language только если это не общий зачет
+        if rating_type != 'Общий':
+            params["language"] = rating_type
         
         for attempt in range(self.max_retries):
             try:
@@ -106,63 +123,63 @@ class CodeRunRatingScraper:
                     return await response.text()
             except Exception as e:
                 if attempt == self.max_retries - 1:
-                    raise NetworkError(f"Не удалось загрузить страницу {page} для языка {language} после {self.max_retries} попыток: {str(e)}")
+                    raise NetworkError(f"Не удалось загрузить страницу {page} для {rating_type} после {self.max_retries} попыток: {str(e)}")
                 await asyncio.sleep(self.delay * 2)
 
-    async def _collect_language_stats(self, language: str) -> List[Dict[str, Any]]:
-        """Асинхронно собирает статистику по всем страницам для указанного языка."""
+    async def _collect_stats(self, rating_type: str) -> List[Dict[str, Any]]:
+        """Асинхронно собирает статистику по всем страницам для указанного типа рейтинга."""
         all_data = []
         
         try:
-            html = await self._fetch_page(language, 1)
+            html = await self._fetch_page(rating_type, 1)
             soup = BeautifulSoup(html, 'html.parser')
             total_pages = self._get_total_pages(soup)
             
             if total_pages <= 0:
-                raise DataCollectionError(language, "Не удалось определить количество страниц")
+                raise DataCollectionError(rating_type, "Не удалось определить количество страниц")
                 
-            page_data = self._parse_table(soup, language)
+            page_data = self._parse_table(soup, rating_type)
             if not page_data:
-                raise EmptyDataError(f"Нет данных на первой странице для языка {language}")
+                raise EmptyDataError(f"Нет данных на первой странице для {rating_type}")
             all_data.extend(page_data)
 
             tasks = []
             for page in range(2, total_pages + 1):
-                tasks.append(self._process_page(language, page))
+                tasks.append(self._process_page(rating_type, page))
                 
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for result in results:
                 if isinstance(result, Exception):
-                    raise PageProcessingError(language, message=str(result))
+                    raise PageProcessingError(rating_type, message=str(result))
                 if not result:
-                    raise EmptyDataError(f"Нет данных на странице {page} для языка {language}")
+                    raise EmptyDataError(f"Нет данных на странице {page} для {rating_type}")
                 all_data.extend(result)
                 
         except Exception as e:
             if not isinstance(e, ScraperError):
-                raise DataCollectionError(language, str(e))
+                raise DataCollectionError(rating_type, str(e))
             raise
             
         if not all_data:
-            raise EmptyDataError(f"Не удалось собрать данные для языка {language}")
+            raise EmptyDataError(f"Не удалось собрать данные для {rating_type}")
             
         return all_data
 
-    async def _process_page(self, language: str, page: int) -> List[Dict[str, Any]]:
+    async def _process_page(self, rating_type: str, page: int) -> List[Dict[str, Any]]:
         """Обрабатывает одну страницу."""
-        print(f"[{language}] Загружается страница {page}...")
+        print(f"[{rating_type}] Загружается страница {page}...")
         await asyncio.sleep(self.delay)  # Задержка между запросами
         
-        html = await self._fetch_page(language, page)
+        html = await self._fetch_page(rating_type, page)
         soup = BeautifulSoup(html, 'html.parser')
-        return self._parse_table(soup, language)
+        return self._parse_table(soup, rating_type)
 
     def get_data(self) -> pd.DataFrame:
         """Возвращает текущий DataFrame с рейтингом."""
         return self.df.copy()
 
     async def update(self) -> None:
-        """Асинхронно обновляет данные рейтинга по всем языкам."""
+        """Асинхронно обновляет данные рейтинга по всем языкам и общему зачету."""
         if self._is_updating:
             raise UpdateInProgressError()
             
@@ -171,9 +188,18 @@ class CodeRunRatingScraper:
             async with self._lock:
                 all_results = []
                 
+                # Собираем данные по общему зачету, если требуется
+                if self.include_general:
+                    try:
+                        general_data = await self._collect_stats('Общий')
+                        all_results.extend(general_data)
+                    except DataCollectionError as e:
+                        raise DataCollectionError(f"Не удалось обработать общий зачет: {str(e)}")
+                
+                # Собираем данные по языкам программирования
                 for lang in self.languages:
                     try:
-                        lang_data = await self._collect_language_stats(lang)
+                        lang_data = await self._collect_stats(lang)
                         all_results.extend(lang_data)
                     except DataCollectionError as e:
                         raise DataCollectionError(f"Не удалось обработать язык {lang}: {str(e)}")
@@ -185,9 +211,6 @@ class CodeRunRatingScraper:
                 self._last_update = datetime.now()
         finally:
             self._is_updating = False
-
-
-
 
     def save(
         self,
@@ -219,6 +242,7 @@ class CodeRunRatingScraper:
             print(f"✅ Данные сохранены в Excel: {full_filename}")
         else:
             raise ValueError(f"Неподдерживаемый формат файла: {file_format}")
+
     def load(
         self,
         filename: str = None,
@@ -239,7 +263,6 @@ class CodeRunRatingScraper:
         """
         filename = filename or ParserConfig.DEFAULT_FILENAME
         file_format = file_format or ParserConfig.DEFAULT_FILE_FORMAT
-        
         if file_format.lower() == 'csv':
             full_filename = f"{filename}.csv"
             try:
