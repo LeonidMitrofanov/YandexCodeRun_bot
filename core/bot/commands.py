@@ -57,7 +57,7 @@ async def cmd_update(message: types.Message):
 
 @router.message(Command("contact"))
 async def cmd_contact(message: types.Message):
-    await message.answer(InfoText.contact_text)
+    await message.answer(InfoText.contact)
 
 @router.message(Command("user_by_lang"))
 async def cmd_lang_distr(message: types.Message):
@@ -158,24 +158,111 @@ async def cmd_user_stats(message: types.Message):
             await message.answer(f"Пользователь {username} не найден")
             return
 
-        response = [f"📊 Статистика для {username}:\n"]
-        
+        # Основные данные
+        tasks = user_data['Задачи'].values[0]
+        last_update = format_date(user_data['Дата'].values[0])
+        total_points = user_data['Баллы_Общий'].values[0]
+        total_place = user_data['Место_Общий'].values[0]
+
+        # Собираем информацию по языкам
+        languages = []
         for col in user_data.columns:
             if col.startswith('Баллы_'):
                 lang = col.split('_')[1]
                 points = user_data[col].values[0]
-                place = user_data[f'Место_{lang}'].values[0]
+                place_str = user_data[f'Место_{lang}'].values[0]
                 
-                if pd.notna(points):
-                    response.append(
-                        f"{lang.upper()}: {points} баллов (место {place})"
-                    )
+                if pd.notna(points) and place_str.isdigit():
+                    place = int(place_str)
+                    languages.append({
+                        'lang': lang,
+                        'points': points,
+                        'place': place
+                    })
 
-        tasks = user_data['Задачи'].values[0]
-        last_update = format_date(user_data['Дата'].values[0])
-        response.append(f"\n📌 Решено задач: {tasks}")
-        response.append(f"🕒 Последнее решение: {last_update}")
-        await message.answer("\n".join(response))
+        # Сортируем языки по баллам (по убыванию)
+        languages.sort(key=lambda x: x['points'], reverse=True)
+
+        # Разделяем языки на группы
+        top_languages = []
+        good_languages = []
+        other_languages = []
+        
+        for lang in languages:
+            if lang['place'] <= 10:
+                top_languages.append(lang)
+            elif lang['place'] <= 20:
+                good_languages.append(lang)
+            else:
+                other_languages.append(lang)
+
+        # Формируем сообщение
+        response = [
+            f"👤 *{username}*",
+            f"✅ Решено задач: {tasks}",
+            f"🕒 Последнее решение: {last_update}",
+            "\n---\n",
+            "🔹 *Общий зачёт:*"
+        ]
+
+        # Добавляем общую статистику
+        try:
+            total_place_int = int(total_place)
+            top100_row = user_stats[user_stats['Место_Общий'] == '100']
+            top100_points = top100_row['Баллы_Общий'].values[0] if not top100_row.empty else 0
+            points_diff = abs(total_points - top100_points)
+            
+            if total_points >= top100_points:
+                response.append(f"📍 {total_place} место ({total_points} баллов)")
+                response.append(f"📊 +{points_diff} баллов над топ-100")
+            else:
+                response.append(f"📍 {total_place} место ({total_points} баллов)")
+                response.append(f"📊 -{points_diff} баллов до топ-100")
+        except (ValueError, IndexError):
+            response.append(f"📍 {total_place} место ({total_points} баллов)")
+
+        # Добавляем языки программирования
+        if languages:
+            response.append("\n🔹 *Языки программирования:*")
+            
+            for lang in top_languages:
+                response.append(f"🏆 {lang['lang']} – {lang['place']} место ({lang['points']})")
+            
+            for lang in good_languages:
+                response.append(f"📜 {lang['lang']} – {lang['place']} место ({lang['points']})")
+                
+            for lang in other_languages[:5]:  # Ограничиваем количество других языков
+                response.append(f"🔸 {lang['lang']} – {lang['place']} место ({lang['points']})")
+        else:
+            response.append("\n🔹 Нет данных по языкам программирования")
+
+        # Добавляем информацию о привилегиях
+        has_fast_track = total_place_int <= 100 if 'total_place_int' in locals() else False
+        has_merch = total_place_int <= 100 if 'total_place_int' in locals() else False
+        has_certificate = total_place_int <= 300 if 'total_place_int' in locals() else False
+        
+        if not has_fast_track:
+            has_fast_track = any(lang['place'] <= 10 for lang in languages)
+        if not has_merch:
+            has_merch = any(lang['place'] <= 10 for lang in languages)
+        if not has_certificate:
+            has_certificate = any(lang['place'] <= 20 for lang in languages)
+
+        response.extend([
+            "\n---\n",
+            "🎁 *Текущие привилегии:*",
+            "✅ Фаст-трек" if has_fast_track else "❌ Фаст-трек",
+            "✅ Мерч CodeRun" if has_merch else "❌ Мерч CodeRun",
+            "✅ Сертификат" if has_certificate else "❌ Сертификат",
+            "\n---\n",
+            "📝 *Пояснения*",
+            "• Фаст-трек: Топ-10 по языку / Топ-100 в общем зачёте",
+            "• Мерч: Топ-10 по языку / Топ-100 в общем зачёте",
+            "• Сертификат: Топ-20 по языку / Топ-300 в общем зачёте",
+            "• Разница баллов указана относительно границы нужного топа"
+        ])
+
+        await message.answer("\n".join(response), parse_mode="Markdown")
 
     except IndexError:
         await message.answer("Укажите ник пользователя:\n/user_stats <ник>")
