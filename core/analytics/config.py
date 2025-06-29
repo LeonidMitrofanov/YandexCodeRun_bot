@@ -1,20 +1,7 @@
-class StatConfig:
-    LANGUAGES = [
-        'Общий',
-        'python',
-        'c',
-        'c-plus-plus',
-        'c-sharp',
-        'java',
-        'javascript',
-        'kotlin',
-        'swift',
-        'go',
-        'rust',
-        'dart',
-        'pascal'
-    ]
+from ..config import MainConfig
 
+class StatConfig:
+    LANGUAGES = [*MainConfig.LANGUAGES, 'Общий']
     COMMON_COLUMNS = {
         'Задачи': 'first',
         'Дата': 'max'

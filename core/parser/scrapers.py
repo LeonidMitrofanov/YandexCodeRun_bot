@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+import pytz
 import pandas as pd
 from bs4 import BeautifulSoup
 from datetime import datetime
@@ -25,7 +26,7 @@ class CodeRunRatingScraper:
             max_retries: Максимальное количество попыток повторного запроса
             include_general: Включать ли общий зачет в парсинг
         """
-        self.languages = languages or ParserConfig.get_languages()
+        self.languages = languages or ParserConfig.DEFAULT_LANGUAGES
         self.delay = delay or ParserConfig.DELAY_BETWEEN_REQUESTS
         self.max_retries = max_retries or ParserConfig.MAX_RETRIES
         self.include_general = include_general
@@ -44,7 +45,7 @@ class CodeRunRatingScraper:
         """Создает или возвращает существующую сессию."""
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(
-                headers=ParserConfig.get_headers(),
+                headers=ParserConfig.HEADERS,
                 timeout=aiohttp.ClientTimeout(total=ParserConfig.REQUEST_TIMEOUT)
             )
         return self._session
@@ -87,7 +88,13 @@ class CodeRunRatingScraper:
             points = cells[3].get_text(strip=True)
 
             time_tag = cells[4].find('time')
-            date = time_tag['datetime'] if time_tag else cells[4].get_text(strip=True)
+            time_tag = cells[4].find('time')
+            if time_tag:
+                dt = datetime.fromisoformat(time_tag['datetime'])
+                dt = dt.astimezone(pytz.timezone(ParserConfig.TIME_ZONE))
+                date = dt.strftime(ParserConfig.DATETIME_FORMAT)
+            else:
+                date = cells[4].get_text(strip=True)
 
             data.append({
                 'Участник': user,

@@ -189,12 +189,13 @@ async def cmd_user_stats(message: types.Message):
         other_languages = []
         
         for lang in languages:
-            if lang['place'] <= 10:
-                top_languages.append(lang)
-            elif lang['place'] <= 20:
-                good_languages.append(lang)
-            else:
-                other_languages.append(lang)
+            if lang['lang'] != 'Общий':
+                if lang['place'] <= 10:
+                    top_languages.append(lang)
+                elif lang['place'] <= 20:
+                    good_languages.append(lang)
+                else:
+                    other_languages.append(lang)
 
         # Формируем сообщение
         response = [
@@ -255,11 +256,7 @@ async def cmd_user_stats(message: types.Message):
             "✅ Мерч CodeRun" if has_merch else "❌ Мерч CodeRun",
             "✅ Сертификат" if has_certificate else "❌ Сертификат",
             "\n---\n",
-            "📝 *Пояснения*",
-            "• Фаст-трек: Топ-10 по языку / Топ-100 в общем зачёте",
-            "• Мерч: Топ-10 по языку / Топ-100 в общем зачёте",
-            "• Сертификат: Топ-20 по языку / Топ-300 в общем зачёте",
-            "• Разница баллов указана относительно границы нужного топа"
+            InfoText.about_reward
         ])
 
         await message.answer("\n".join(response), parse_mode="Markdown")
@@ -267,7 +264,8 @@ async def cmd_user_stats(message: types.Message):
     except IndexError:
         await message.answer("Укажите ник пользователя:\n/user_stats <ник>")
     except Exception as e:
-        await message.answer(f"⚠️ Неизвестная ошибка: {str(e)}")
+        raise e
+        # await message.answer(f"⚠️ Неизвестная ошибка: {str(e)}")
 
 def register_commands(dp):
     dp.startup.register(on_startup)
