@@ -13,7 +13,7 @@ class PlotBuilder:
         for col in df.columns:
             if col.startswith('Баллы_'):
                 language = col.split('_')[1]
-                if language in StatConfig.LANGUAGES:  # Исключаем общий зачет
+                if language in StatConfig.LANGUAGES and language != 'Общий':  # Исключаем общий зачет
                     language_counts[language] = (df[col] > 0).sum()
         return language_counts
 
@@ -101,7 +101,9 @@ class PlotBuilder:
         """Строит столбчатую диаграмму распределения количества языков программирования,
         на которых пишет один участник (исключая общий зачет)"""
         language_columns = [col for col in df.columns 
-                          if col.startswith('Баллы_') and col.split('_')[1] in StatConfig.LANGUAGES]
+                        if col.startswith('Баллы_') and 
+                        col.split('_')[1] in StatConfig.LANGUAGES and
+                        col.split('_')[1] != 'Общий']  # Исключаем общий зачет
         user_data = df.groupby('Участник')[language_columns].first()
         user_language_counts = (user_data > 0).sum(axis=1)
         language_distribution = user_language_counts.value_counts().sort_index()
@@ -122,12 +124,12 @@ class PlotBuilder:
                         ax=ax)
         
         ax.annotate(f'Всего участников: {total_participants}',
-                   xy=(0.95, 0.95),
-                   xycoords='axes fraction',
-                   ha='right',
-                   va='top',
-                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
-                   fontsize=12)
+                xy=(0.95, 0.95),
+                xycoords='axes fraction',
+                ha='right',
+                va='top',
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
+                fontsize=12)
         
         for p in ax.patches:
             ax.annotate(
