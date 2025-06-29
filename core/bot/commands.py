@@ -264,7 +264,8 @@ async def cmd_user_stats(message: types.Message):
     except IndexError:
         await message.answer("Укажите ник пользователя:\n/user_stats <ник>")
     except Exception as e:
-        await message.answer(f"⚠️ Неизвестная ошибка: {str(e)}")
+        raise e
+        # await message.answer(f"⚠️ Неизвестная ошибка: {str(e)}")
 
 def register_commands(dp):
     dp.startup.register(on_startup)

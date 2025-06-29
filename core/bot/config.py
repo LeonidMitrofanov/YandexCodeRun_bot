@@ -1,11 +1,12 @@
 import os
 from dotenv import load_dotenv
+from ..config import MainConfig
 
 load_dotenv()
 
 class BotConfig:
-    BOT_TOKEN = os.getenv("BOT_TOKEN")
-    PATH_TO_DATA = "core/storage/data/data"
-    DATA_FORMAT = "csv"
-    DATETIME_FORMAT_FROM = "%Y-%m-%dT%H:%M:%S.%fZ"
-    DATETIME_FORMAT_TO = "%H:%M %d.%m.%Y"
+    BOT_TOKEN: str = os.getenv("BOT_TOKEN")
+    PATH_TO_DATA: str = "core/storage/data/data"
+    DATA_FORMAT: str = "csv"
+    DATETIME_FORMAT_FROM: str = MainConfig.DATETIME_FORMAT
+    DATETIME_FORMAT_TO: str = MainConfig.DATETIME_FORMAT

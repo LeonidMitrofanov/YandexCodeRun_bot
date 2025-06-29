@@ -1,4 +1,6 @@
+import pytz
 from typing import List, Dict
+from ..config import MainConfig
 
 class ParserConfig:
     
@@ -13,20 +15,10 @@ class ParserConfig:
                       "Chrome/125.0.0.0 Safari/537.36"
     }
     
-    DEFAULT_LANGUAGES: List[str] = [
-        'python', 'c', 'c-plus-plus', 'c-sharp', 'java', 'javascript',
-        'kotlin', 'swift', 'go', 'rust', 'dart', 'pascal'
-    ]
+    DEFAULT_LANGUAGES: List[str] = MainConfig.LANGUAGES
     
     DEFAULT_FILE_FORMAT: str = 'csv'  # 'csv' или 'excel'
     DEFAULT_FILENAME: str = 'yandex_coderun_rating'
     
-    @classmethod
-    def get_languages(cls) -> List[str]:
-        """Возвращает список языков для парсинга."""
-        return cls.DEFAULT_LANGUAGES
-    
-    @classmethod
-    def get_headers(cls) -> Dict[str, str]:
-        """Возвращает HTTP-заголовки для запросов."""
-        return cls.HEADERS.copy()
+    TIME_ZONE: str = 'Europe/Moscow'
+    DATETIME_FORMAT: str = MainConfig.DATETIME_FORMAT
