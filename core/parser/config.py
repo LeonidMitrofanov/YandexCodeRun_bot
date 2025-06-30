@@ -1,4 +1,3 @@
-import pytz
 from typing import List, Dict
 from ..config import MainConfig
 

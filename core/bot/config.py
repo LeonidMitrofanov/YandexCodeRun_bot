@@ -8,5 +8,4 @@ class BotConfig:
     BOT_TOKEN: str = os.getenv("BOT_TOKEN")
     PATH_TO_DATA: str = "core/storage/data/data"
     DATA_FORMAT: str = "csv"
-    DATETIME_FORMAT_FROM: str = MainConfig.DATETIME_FORMAT
-    DATETIME_FORMAT_TO: str = MainConfig.DATETIME_FORMAT
+    DATETIME_FORMAT: str = MainConfig.DATETIME_FORMAT

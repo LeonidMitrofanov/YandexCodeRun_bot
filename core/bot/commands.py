@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 from core.parser import CodeRunRatingScraper
 from core.parser.exceptions import *
 from core.analytics import StatsCalculator, PlotBuilder
-from .utils import *
+from .utils import format_date
 from .texts.commands import CommandTexts
 from .texts.info import InfoText
 from .keyboards import help_keyboard
@@ -160,7 +160,7 @@ async def cmd_user_stats(message: types.Message):
 
         # Основные данные
         tasks = user_data['Задачи'].values[0]
-        last_update = format_date(user_data['Дата'].values[0])
+        last_update = format_date(user_data['Дата'].iloc[0])
         total_points = user_data['Баллы_Общий'].values[0]
         total_place = user_data['Место_Общий'].values[0]
 

@@ -1,19 +1,35 @@
 from datetime import datetime
+import numpy as np
 from .config import BotConfig
 
-def format_date(time):
-    """Форматирует дату из строки ISO, datetime объекта или None"""
-    if time is None:
-        return "неизвестно"
+def format_date(dt) -> str:
+    """Форматирует дату в строку по заданному формату.
+    
+    Поддерживает:
+    - datetime.datetime
+    - numpy.datetime64
+    - pandas.Timestamp
+    
+    Args:
+        dt: Объект даты/времени
         
+    Returns:
+        Строка с датой в формате BotConfig.DATETIME_FORMAT
+        или сообщение об ошибке.
+    """
+    if dt is None:
+        return "неизвестно"
+    
     try:
-        if isinstance(time, str):
-            dt = datetime.strptime(time, BotConfig.DATETIME_FORMAT_FROM)
-        elif isinstance(time, datetime):
-            dt = time
+        # Преобразуем numpy.datetime64 в datetime
+        if isinstance(dt, np.datetime64):
+            dt = dt.astype(datetime)
+        
+        # Проверяем, что объект поддерживает strftime
+        if hasattr(dt, 'strftime'):
+            return dt.strftime(BotConfig.DATETIME_FORMAT)
         else:
-            return str(time)
+            return f"Неподдерживаемый тип даты: {type(dt)}"
             
-        return dt.strftime(BotConfig.DATETIME_FORMAT_TO)
     except Exception as e:
-        return f"Ошибка формата даты: {str(e)}"
+        return f"Ошибка форматирования: {str(e)}"

@@ -88,13 +88,13 @@ class CodeRunRatingScraper:
             points = cells[3].get_text(strip=True)
 
             time_tag = cells[4].find('time')
-            time_tag = cells[4].find('time')
             if time_tag:
                 dt = datetime.fromisoformat(time_tag['datetime'])
                 dt = dt.astimezone(pytz.timezone(ParserConfig.TIME_ZONE))
-                date = dt.strftime(ParserConfig.DATETIME_FORMAT)
+                date = dt  # оставляем как datetime
             else:
-                date = cells[4].get_text(strip=True)
+                date_str = cells[4].get_text(strip=True)
+                date = pd.to_datetime(date_str, errors='coerce')
 
             data.append({
                 'Участник': user,
