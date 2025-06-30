@@ -9,9 +9,8 @@ class ParserConfig:
     MAX_RETRIES: int = 3
     
     HEADERS: Dict[str, str] = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/125.0.0.0 Safari/537.36"
+        "User-Agent": "CodeRun_stat_bot"
+            "(+https://github.com/LeonidMitrofanov/YandexCodeRun_bot)"
     }
     
     DEFAULT_LANGUAGES: List[str] = MainConfig.LANGUAGES
