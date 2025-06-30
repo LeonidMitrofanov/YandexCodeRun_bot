@@ -5,7 +5,7 @@ class ParserConfig:
     
     BASE_URL: str = 'https://coderun.yandex.ru/seasons/2025-summer/tracks/common/rating'
     REQUEST_TIMEOUT: int = 10
-    DELAY_BETWEEN_REQUESTS: float = 1.0
+    DELAY_BETWEEN_REQUESTS: float = 0.5
     MAX_RETRIES: int = 3
     
     HEADERS: Dict[str, str] = {
