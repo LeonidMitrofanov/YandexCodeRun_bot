@@ -15,7 +15,7 @@ class CodeRunRatingScraper:
         languages: Optional[List[str]] = None,
         delay: Optional[float] = None,
         max_retries: Optional[int] = None,
-        include_general: bool = True
+        include_general: bool = None
     ):
         """
         Асинхронный парсер рейтинга CodeRun.
@@ -29,7 +29,7 @@ class CodeRunRatingScraper:
         self.languages = languages or ParserConfig.DEFAULT_LANGUAGES
         self.delay = delay or ParserConfig.DELAY_BETWEEN_REQUESTS
         self.max_retries = max_retries or ParserConfig.MAX_RETRIES
-        self.include_general = include_general
+        self.include_general = include_general or ParserConfig.INCLUDE_GENERAL
         self.df = pd.DataFrame()
         self._last_update: Optional[datetime] = None
         self._session: Optional[aiohttp.ClientSession] = None
@@ -136,41 +136,42 @@ class CodeRunRatingScraper:
     async def _collect_stats(self, rating_type: str) -> List[Dict[str, Any]]:
         """Асинхронно собирает статистику по всем страницам для указанного типа рейтинга."""
         all_data = []
-        
+
         try:
+            # Загружаем первую страницу
             html = await self._fetch_page(rating_type, 1)
             soup = BeautifulSoup(html, 'html.parser')
             total_pages = self._get_total_pages(soup)
-            
+
             if total_pages <= 0:
                 raise DataCollectionError(rating_type, "Не удалось определить количество страниц")
-                
+
             page_data = self._parse_table(soup, rating_type)
             if not page_data:
                 raise EmptyDataError(f"Нет данных на первой странице для {rating_type}")
             all_data.extend(page_data)
 
-            tasks = []
             for page in range(2, total_pages + 1):
-                tasks.append(self._process_page(rating_type, page))
-                
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for result in results:
-                if isinstance(result, Exception):
-                    raise PageProcessingError(rating_type, message=str(result))
-                if not result:
-                    raise EmptyDataError(f"Нет данных на странице {page} для {rating_type}")
-                all_data.extend(result)
-                
+                try:
+                    print(f"[{rating_type}] Загружается страница {page}...")
+                    result = await self._process_page(rating_type, page)
+                    if not result:
+                        raise EmptyDataError(f"Нет данных на странице {page} для {rating_type}")
+                    all_data.extend(result)
+                    await asyncio.sleep(self.delay)  # Задержка между запросами
+                except Exception as e:
+                    raise PageProcessingError(rating_type, message=str(e))
+
         except Exception as e:
             if not isinstance(e, ScraperError):
                 raise DataCollectionError(rating_type, str(e))
             raise
-            
+
         if not all_data:
             raise EmptyDataError(f"Не удалось собрать данные для {rating_type}")
-            
+
         return all_data
+
 
     async def _process_page(self, rating_type: str, page: int) -> List[Dict[str, Any]]:
         """Обрабатывает одну страницу."""
