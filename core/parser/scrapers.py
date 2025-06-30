@@ -15,7 +15,7 @@ class CodeRunRatingScraper:
         languages: Optional[List[str]] = None,
         delay: Optional[float] = None,
         max_retries: Optional[int] = None,
-        include_general: bool = True
+        include_general: bool = None
     ):
         """
         Асинхронный парсер рейтинга CodeRun.
@@ -29,7 +29,7 @@ class CodeRunRatingScraper:
         self.languages = languages or ParserConfig.DEFAULT_LANGUAGES
         self.delay = delay or ParserConfig.DELAY_BETWEEN_REQUESTS
         self.max_retries = max_retries or ParserConfig.MAX_RETRIES
-        self.include_general = include_general
+        self.include_general = include_general or ParserConfig.INCLUDE_GENERAL
         self.df = pd.DataFrame()
         self._last_update: Optional[datetime] = None
         self._session: Optional[aiohttp.ClientSession] = None
