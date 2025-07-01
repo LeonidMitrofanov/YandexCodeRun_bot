@@ -18,7 +18,7 @@ class CodeRunRatingScraper:
         include_general: bool = None
     ):
         """
-        Асинхронный парсер рейтинга CodeRun.
+        Парсер рейтинга CodeRun.
         
         Args:
             languages: Список языков программирования для парсинга
@@ -107,7 +107,7 @@ class CodeRunRatingScraper:
         return data
 
     async def _fetch_page(self, rating_type: str, page: int) -> str:
-        """Асинхронно загружает страницу.
+        """Загружает страницу.
         
         Args:
             rating_type: Тип рейтинга ('Общий' или язык программирования)
@@ -135,7 +135,7 @@ class CodeRunRatingScraper:
                 await asyncio.sleep(self.delay * 2)
 
     async def _collect_stats(self, rating_type: str) -> List[Dict[str, Any]]:
-        """Асинхронно собирает статистику по всем страницам для указанного типа рейтинга."""
+        """Cобирает статистику по всем страницам для указанного типа рейтинга."""
         all_data = []
 
         try:
@@ -154,7 +154,6 @@ class CodeRunRatingScraper:
 
             for page in range(2, total_pages + 1):
                 try:
-                    print(f"[{rating_type}] Загружается страница {page}...")
                     result = await self._process_page(rating_type, page)
                     if not result:
                         raise EmptyDataError(f"Нет данных на странице {page} для {rating_type}")
@@ -177,15 +176,10 @@ class CodeRunRatingScraper:
     async def _process_page(self, rating_type: str, page: int) -> List[Dict[str, Any]]:
         """Обрабатывает одну страницу."""
         print(f"[{rating_type}] Загружается страница {page}...")
-        await asyncio.sleep(self.delay)  # Задержка между запросами
-        
+
         html = await self._fetch_page(rating_type, page)
         soup = BeautifulSoup(html, 'html.parser')
         return self._parse_table(soup, rating_type)
-
-    def get_data(self) -> pd.DataFrame:
-        """Возвращает текущий DataFrame с рейтингом."""
-        return self.df.copy()
 
     async def update(self) -> None:
         """Асинхронно обновляет данные рейтинга по всем языкам и общему зачету."""
@@ -221,6 +215,10 @@ class CodeRunRatingScraper:
         finally:
             self._is_updating = False
 
+    def get_data(self) -> pd.DataFrame:
+        """Возвращает текущий DataFrame с рейтингом."""
+        return self.df.copy()
+    
     def save(
         self,
         filename: str = None,
