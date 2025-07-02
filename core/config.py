@@ -18,7 +18,7 @@ class MainConfig:
 
     MAX_LOG_SIZE: int = 10 * 1024 * 1024  # 10 MB
     LOG_BACKUP_COUNT: int = 5
-    LOG_LEVEL: str = "INFO"# "DEBUG"
+    LOG_LEVEL: str = "INFO"  # "DEBUG"
 
     LOG_CONFIG: Dict[str, Any] = {
             "version": 1,
