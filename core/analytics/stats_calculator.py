@@ -5,8 +5,17 @@ from .config import StatConfig
 class StatsCalculator:
     @staticmethod
     def _get_language_columns(prefix: str) -> Dict[str, str]:
-        """Возвращает словарь с колонками для конкретного префикса"""
+        """Возвращает словарь с колонками для конкретного префикса
+        
+        Args:
+            prefix: Префикс для колонок (например, 'Место_' или 'Баллы_')
+            
+        Returns:
+            Словарь в формате {название_колонки: метод_агрегации}
+        """
         columns = {f'{prefix}{lang}': 'first' for lang in StatConfig.LANGUAGES}
+        if StatConfig.INCLUDE_GENERAL:
+            columns[f'{prefix}Общий'] = 'first'
         return columns
 
     @classmethod
