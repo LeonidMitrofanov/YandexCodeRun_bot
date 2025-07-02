@@ -1,76 +1,132 @@
+import logging
 import pandas as pd
-from aiogram import Dispatcher, Router, types
-from aiogram.filters import Command
 from io import BytesIO
+from aiogram.filters import Command
+from aiogram import Dispatcher, Router, types
 from matplotlib import pyplot as plt
+from core.analytics import StatsCalculator, PlotBuilder
 from core.parser import CodeRunRatingScraper
 from core.parser.exceptions import *
-from core.analytics import StatsCalculator, PlotBuilder
-from .utils import format_date
 from .texts.commands import CommandTexts
-from .texts.info import InfoText
 from .keyboards import help_keyboard
+from .texts.info import InfoText
+from .utils import format_date
 from .config import BotConfig
+
+logger = logging.getLogger(__name__)
 
 scraper = CodeRunRatingScraper()
 router = Router()
 
+def get_user_info(message: types.Message) -> str:
+    """Формирует строку с информацией о пользователе"""
+    user = message.from_user
+    return f"(@{user.username}) [id:{user.id}]"
+
+
 async def on_startup(dispatcher: Dispatcher):
     try:
+        logger.info("Попытка загрузки данных при старте бота")
         scraper.load(BotConfig.PATH_TO_DATA)
-        print(f"✅ Данные успешно загружены из файла ({scraper.last_update})")
     except FileNotFoundError:
-        print("ℹ️ Файл с данными не найден, будет создан при первом обновлении")
+        logger.warning("Файл с данными не найден, будет создан при первом обновлении")
     except Exception as e:
-        print(f"⚠️ Ошибка при загрузке данных: {e}")
+        logger.error(f"Ошибка при загрузке данных: {e}", exc_info=True)
+        raise
+
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer(
-        CommandTexts.START,
-        reply_markup=help_keyboard
-    )
+    try:
+        user_info = get_user_info(message)
+        logger.info(f"Обработка команды /start от пользователя {user_info}")
+        await message.answer(
+            CommandTexts.START,
+            reply_markup=help_keyboard
+        )
+        logger.debug(f"Команда /start успешно обработана для {user_info}")
+    except Exception as e:
+        logger.error(f"Ошибка в обработке /start: {e}", exc_info=True)
+        raise
+
 
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
-    await message.answer(
-        CommandTexts.HELP,
-        reply_markup=help_keyboard
-    )
+    try:
+        user_info = get_user_info(message)
+        logger.info(f"Обработка команды /help от пользователя {user_info}")
+        await message.answer(
+            CommandTexts.HELP,
+            reply_markup=help_keyboard
+        )
+        logger.debug(f"Команда /help успешно обработана для {user_info}")
+    except Exception as e:
+        logger.error(f"Ошибка в обработке /help: {e}", exc_info=True)
+        raise
+
 
 @router.message(Command("update"))
 async def cmd_update(message: types.Message):
-    if scraper._is_updating:
-        await message.answer("🔄 Парсинг уже в процессе, пожалуйста подождите...")
-        return
     try:
+        user_info = get_user_info(message)
+        logger.info(f"Обработка команды /update от пользователя {user_info}")
+        if scraper._is_updating:
+            logger.warning(f"Попытка обновления во время уже выполняющегося обновления ({user_info})")
+            await message.answer("🔄 Парсинг уже в процессе, пожалуйста подождите...")
+            return
+            
         progress_msg = await message.answer("⏳ Парсим данные...")
+        logger.debug(f"Начато обновление данных по запросу {user_info}")
+        
         await scraper.update()
         scraper.save(BotConfig.PATH_TO_DATA)
+        
         formatted_date = format_date(scraper.last_update)
+        logger.info(f"Данные успешно обновлены ({formatted_date}) по запросу {user_info}")
+        
         await message.answer(f"✅ Данные обновлены ({formatted_date})")
         await progress_msg.delete()
+        
     except DataCollectionError as e:
+        logger.error(f"Ошибка сбора данных: {str(e)}", exc_info=True)
         await message.answer(f"❌ Ошибка при обновлении данных: {str(e)}")
     except Exception as e:
+        logger.critical(f"Неизвестная ошибка при обновлении: {str(e)}", exc_info=True)
         await message.answer(f"⚠️ Неизвестная ошибка: {str(e)}")
+    finally:
+        logger.debug(f"Завершение обработки команды /update для {get_user_info(message)}")
+
 
 @router.message(Command("contact"))
 async def cmd_contact(message: types.Message):
-    await message.answer(InfoText.contact)
+    try:
+        user_info = get_user_info(message)
+        logger.info(f"Обработка команды /contact от пользователя {user_info}")
+        await message.answer(InfoText.contact)
+        logger.debug(f"Команда /contact успешно обработана для {user_info}")
+    except Exception as e:
+        logger.error(f"Ошибка в обработке /contact: {e}", exc_info=True)
+        raise
+
 
 @router.message(Command("user_by_lang"))
 async def cmd_lang_distr(message: types.Message):
     try:
+        user_info = get_user_info(message)
+        logger.info(f"Обработка команды /user_by_lang от пользователя {user_info}")
         df = scraper.get_data()
+        
         if df.empty:
-            await message.answer("Нет данных для построения графиков\n"
-                                 "Выполните /update")
+            logger.warning(f"Нет данных для построения графиков (запрос от {user_info})")
+            await message.answer("Нет данных для построения графиков\nВыполните /update")
             return
 
         progress_msg = await message.answer("⏳ Строим графики...")
+        logger.debug(f"Начато построение графиков распределения по языкам для {user_info}")
+        
         fig_bar = PlotBuilder.plot_users_by_language_bar(df)
         fig_pie = PlotBuilder.plot_users_by_language_pie(df)
+        logger.debug(f"Графики успешно построены для {user_info}")
 
         def fig_to_bytes(fig: plt.Figure) -> bytes:
             buf = BytesIO()
@@ -92,29 +148,37 @@ async def cmd_lang_distr(message: types.Message):
             photo=pie_photo,
             caption="🍰 Распределение участников по языкам (круговая диаграмма)"
         )
-
+        
         await progress_msg.delete()
+        logger.info(f"Графики успешно отправлены пользователю {user_info}")
 
     except ValueError as e:
+        logger.error(f"Ошибка значения при построении графиков: {str(e)}", exc_info=True)
         await message.answer(f"❌ Ошибка: {str(e)}")
     except Exception as e:
+        logger.error(f"Неизвестная ошибка при построении графиков: {str(e)}", exc_info=True)
         await message.answer(f"⚠️ Неизвестная ошибка: {str(e)}")
-    
+
+
+
 @router.message(Command("langcnt_by_user"))
 async def cmd_user_langs_distr(message: types.Message):
-    """
-    Отправляет диаграмму распределения участников по количеству используемых языков
-    """
     try:
+        user_info = get_user_info(message)
+        logger.info(f"Обработка команды /langcnt_by_user от пользователя {user_info}")
         df = scraper.get_data()
+        
         if df.empty:
-            await message.answer("Нет данных для построения графиков\n"
-                            "Выполните /update")
+            logger.warning(f"Нет данных для построения графиков (запрос от {user_info})")
+            await message.answer("Нет данных для построения графиков\nВыполните /update")
             return
 
         progress_msg = await message.answer("⏳ Строим диаграмму...")
-        fig = PlotBuilder.plot_languages_per_user_distribution(df)
+        logger.debug(f"Начато построение диаграммы распределения языков для {user_info}")
         
+        fig = PlotBuilder.plot_languages_per_user_distribution(df)
+        logger.debug(f"Диаграмма успешно построена для {user_info}")
+
         def fig_to_bytes(fig: plt.Figure) -> bytes:
             buf = BytesIO()
             fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
@@ -131,23 +195,28 @@ async def cmd_user_langs_distr(message: types.Message):
         )
         
         await progress_msg.delete()
+        logger.info(f"Диаграмма успешно отправлена пользователю {user_info}")
     
     except ValueError as e:
+        logger.error(f"Ошибка значения при построении диаграммы: {str(e)}", exc_info=True)
         await message.answer(f"❌ Ошибка: {str(e)}")
     except Exception as e:
+        logger.error(f"Неизвестная ошибка при построении диаграммы: {str(e)}", exc_info=True)
         await message.answer(f"⚠️ Неизвестная ошибка: {str(e)}")
-    
+
+
 @router.message(Command("user_stats"))
 async def cmd_user_stats(message: types.Message):
-    """
-    Показывает статистику по конкретному пользователю
-    Использование: /user_stats <ник>
-    """
     try:
+        user_info = get_user_info(message)
+        logger.info(f"Обработка команды /user_stats от пользователя {user_info}")
         username = message.text.split(maxsplit=1)[1].strip()
+        logger.debug(f"Запрошена статистика для пользователя: {username} (запрос от {user_info})")
+        
         df = scraper.get_data()
         
         if df.empty:
+            logger.warning(f"Нет данных для анализа (запрос от {user_info})")
             await message.answer("Нет данных для анализа\nВыполните /update")
             return
 
@@ -155,6 +224,7 @@ async def cmd_user_stats(message: types.Message):
         user_data = user_stats[user_stats['Участник'] == username]
 
         if user_data.empty:
+            logger.warning(f"Пользователь {username} не найден (запрос от {user_info})")
             await message.answer(f"Пользователь {username} не найден")
             return
 
@@ -163,6 +233,7 @@ async def cmd_user_stats(message: types.Message):
         last_update = format_date(user_data['Дата'].iloc[0])
         total_points = user_data['Баллы_Общий'].values[0]
         total_place = user_data['Место_Общий'].values[0]
+        logger.debug(f"Получены основные данные для {username} (запрос от {user_info})")
 
         # Собираем информацию по языкам
         languages = []
@@ -179,6 +250,7 @@ async def cmd_user_stats(message: types.Message):
                         'points': points,
                         'place': place
                     })
+        logger.debug(f"Получены данные по языкам для {username} (запрос от {user_info})")
 
         # Сортируем языки по баллам (по убыванию)
         languages.sort(key=lambda x: x['points'], reverse=True)
@@ -196,6 +268,7 @@ async def cmd_user_stats(message: types.Message):
                     good_languages.append(lang)
                 else:
                     other_languages.append(lang)
+        logger.debug(f"Языки классифицированы для {username} (запрос от {user_info})")
 
         # Формируем сообщение
         response = [
@@ -221,6 +294,7 @@ async def cmd_user_stats(message: types.Message):
                 response.append(f"📊 -{points_diff} баллов до топ-100")
         except (ValueError, IndexError):
             response.append(f"📍 {total_place} место ({total_points} баллов)")
+        logger.debug(f"Сформирована общая статистика для {username} (запрос от {user_info})")
 
         # Добавляем языки программирования
         if languages:
@@ -232,10 +306,11 @@ async def cmd_user_stats(message: types.Message):
             for lang in good_languages:
                 response.append(f"📜 {lang['lang']} – {lang['place']} место ({lang['points']})")
                 
-            for lang in other_languages[:5]:  # Ограничиваем количество других языков
+            for lang in other_languages[:5]:
                 response.append(f"🔸 {lang['lang']} – {lang['place']} место ({lang['points']})")
         else:
             response.append("\n🔹 Нет данных по языкам программирования")
+        logger.debug(f"Сформирована статистика по языкам для {username} (запрос от {user_info})")
 
         # Добавляем информацию о привилегиях
         has_fast_track = total_place_int <= 100 if 'total_place_int' in locals() else False
@@ -258,15 +333,25 @@ async def cmd_user_stats(message: types.Message):
             "\n---\n",
             InfoText.about_reward
         ])
+        logger.debug(f"Сформирована информация о привилегиях для {username} (запрос от {user_info})")
 
         await message.answer("\n".join(response), parse_mode="Markdown")
+        logger.info(f"Статистика для {username} успешно отправлена пользователю {user_info}")
 
     except IndexError:
+        logger.warning(f"Не указан ник пользователя для команды /user_stats (запрос от {get_user_info(message)})")
         await message.answer("Укажите ник пользователя:\n/user_stats <ник>")
     except Exception as e:
-        raise e
-        # await message.answer(f"⚠️ Неизвестная ошибка: {str(e)}")
+        logger.error(f"Ошибка при обработке /user_stats: {str(e)}", exc_info=True)
+        await message.answer(f"⚠️ Неизвестная ошибка: {str(e)}")
+
 
 def register_commands(dp):
-    dp.startup.register(on_startup)
-    dp.include_router(router)
+    try:
+        logger.info("Регистрация команд бота")
+        dp.startup.register(on_startup)
+        dp.include_router(router)
+        logger.debug("Команды успешно зарегистрированы")
+    except Exception as e:
+        logger.critical(f"Ошибка при регистрации команд: {e}", exc_info=True)
+        raise

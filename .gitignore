@@ -17,3 +17,7 @@ core/storage/data/*
 !core/storage/data/.gitkeep
 core/storage/plots/*
 !core/storage/plots/.gitkeep
+
+# Логи
+core/storage/logs/*
+!core/storage/logs/.gitkeep

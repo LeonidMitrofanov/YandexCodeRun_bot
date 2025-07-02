@@ -13,7 +13,7 @@ class ParserConfig:
             "(+https://github.com/LeonidMitrofanov/YandexCodeRun_bot)"
     }
     
-    INCLUDE_GENERAL = True
+    INCLUDE_GENERAL: bool = MainConfig.INCLUDE_GENERAL
     DEFAULT_LANGUAGES: List[str] = MainConfig.LANGUAGES
     
     DEFAULT_FILE_FORMAT: str = 'csv'  # 'csv' или 'excel'
