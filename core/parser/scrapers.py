@@ -18,7 +18,7 @@ class CodeRunRatingScraper:
         include_general: bool = None
     ):
         """
-        Асинхронный парсер рейтинга CodeRun.
+        Парсер рейтинга CodeRun.
         
         Args:
             languages: Список языков программирования для парсинга
@@ -65,19 +65,17 @@ class CodeRunRatingScraper:
                 return max(int(link.text) for link in page_links if link.text.isdigit())
         return 1
 
-    def _parse_table(self, soup: BeautifulSoup, rating_type: str) -> List[Dict[str, Any]]:
-        """Парсит таблицу рейтинга для конкретного языка или общего зачета.
-        
-        Args:
-            soup: Объект BeautifulSoup с HTML страницы
-            rating_type: Тип рейтинга ('Общий' или язык программирования)
-        """
+    def _parse_table(self, soup: BeautifulSoup, rating_type: str) -> tuple:
+        """Парсит таблицу рейтинга и возвращает данные + флаг обнаружения 0 баллов.
+        Применяется одинаково как к языкам, так и к общему зачету."""
         table = soup.find('table', class_='RatingTable_rating-table__ixEUi')
         if not table:
-            return []
+            return [], False
 
         rows = table.select('tbody tr[role="row"]')
         data = []
+        found_zero = False
+        
         for row in rows:
             cells = row.find_all(['td', 'th'], class_='Cell')
             if len(cells) < 5:
@@ -86,28 +84,43 @@ class CodeRunRatingScraper:
             rank = cells[0].get_text(strip=True)
             user = cells[1].get_text(strip=True)
             tasks = cells[2].get_text(strip=True)
-            points = cells[3].get_text(strip=True)
+            points_text = cells[3].get_text(strip=True)
 
+            # Проверяем баллы на 0 (одинаково для всех типов рейтинга)
+            try:
+                points_value = float(points_text.replace(',', '.'))
+                if points_value == 0:
+                    found_zero = True
+            except ValueError:
+                points_value = 0.0
+
+            # Обработка даты
             time_tag = cells[4].find('time')
             if time_tag:
                 dt = datetime.fromisoformat(time_tag['datetime'])
                 dt = dt.astimezone(pytz.timezone(ParserConfig.TIME_ZONE))
-                date = dt  # оставляем как datetime
+                date = dt
             else:
                 date_str = cells[4].get_text(strip=True)
-                date = pd.to_datetime(date_str, errors='coerce')
+                date = pd.to_datetime(date_str, errors='coerce') or pd.NaT
 
             data.append({
                 'Участник': user,
-                'Задачи': tasks,
+                'Задачи': int(tasks) if tasks.isdigit() else 0,
                 f'Место_{rating_type}': rank,
-                f'Баллы_{rating_type}': float(points.replace(',', '.')),
+                f'Баллы_{rating_type}': points_value,
                 'Дата': date
             })
-        return data
+            
+            # Прерываем обработку строк при первом обнаружении 0
+            if found_zero:
+                break
+
+        return data, found_zero
+
 
     async def _fetch_page(self, rating_type: str, page: int) -> str:
-        """Асинхронно загружает страницу.
+        """Загружает страницу.
         
         Args:
             rating_type: Тип рейтинга ('Общий' или язык программирования)
@@ -135,33 +148,39 @@ class CodeRunRatingScraper:
                 await asyncio.sleep(self.delay * 2)
 
     async def _collect_stats(self, rating_type: str) -> List[Dict[str, Any]]:
-        """Асинхронно собирает статистику по всем страницам для указанного типа рейтинга."""
+        """Cобирает статистику по всем страницам для указанного типа рейтинга.
+        Прекращает парсинг при обнаружении первого участника с 0 баллов."""
         all_data = []
+        found_zero = False  # Флаг обнаружения участника с 0 баллов
+        page = 1  # Начинаем с первой страницы
 
         try:
-            # Загружаем первую страницу
-            html = await self._fetch_page(rating_type, 1)
-            soup = BeautifulSoup(html, 'html.parser')
-            total_pages = self._get_total_pages(soup)
+            while not found_zero:
+                print(f"[{rating_type}] Загружается страница {page}...")
 
-            if total_pages <= 0:
-                raise DataCollectionError(rating_type, "Не удалось определить количество страниц")
+                html = await self._fetch_page(rating_type, page)
+                soup = BeautifulSoup(html, 'html.parser')
+                
+                if page == 1:
+                    total_pages = self._get_total_pages(soup)
+                    if total_pages <= 0:
+                        raise DataCollectionError(rating_type, "Не удалось определить количество страниц")
 
-            page_data = self._parse_table(soup, rating_type)
-            if not page_data:
-                raise EmptyDataError(f"Нет данных на первой странице для {rating_type}")
-            all_data.extend(page_data)
-
-            for page in range(2, total_pages + 1):
-                try:
-                    print(f"[{rating_type}] Загружается страница {page}...")
-                    result = await self._process_page(rating_type, page)
-                    if not result:
-                        raise EmptyDataError(f"Нет данных на странице {page} для {rating_type}")
-                    all_data.extend(result)
-                    await asyncio.sleep(self.delay)  # Задержка между запросами
-                except Exception as e:
-                    raise PageProcessingError(rating_type, message=str(e))
+                page_data, zero_detected = self._parse_table(soup, rating_type)
+                found_zero = zero_detected
+                
+                if not page_data:
+                    if page == 1:
+                        raise EmptyDataError(f"Нет данных на первой странице для {rating_type}")
+                    break
+                
+                all_data.extend(page_data)
+                
+                if not found_zero and page < total_pages:
+                    page += 1
+                    await asyncio.sleep(self.delay)
+                else:
+                    break
 
         except Exception as e:
             if not isinstance(e, ScraperError):
@@ -177,15 +196,10 @@ class CodeRunRatingScraper:
     async def _process_page(self, rating_type: str, page: int) -> List[Dict[str, Any]]:
         """Обрабатывает одну страницу."""
         print(f"[{rating_type}] Загружается страница {page}...")
-        await asyncio.sleep(self.delay)  # Задержка между запросами
-        
+
         html = await self._fetch_page(rating_type, page)
         soup = BeautifulSoup(html, 'html.parser')
         return self._parse_table(soup, rating_type)
-
-    def get_data(self) -> pd.DataFrame:
-        """Возвращает текущий DataFrame с рейтингом."""
-        return self.df.copy()
 
     async def update(self) -> None:
         """Асинхронно обновляет данные рейтинга по всем языкам и общему зачету."""
@@ -197,7 +211,6 @@ class CodeRunRatingScraper:
             async with self._lock:
                 all_results = []
                 
-                # Собираем данные по общему зачету, если требуется
                 if self.include_general:
                     try:
                         general_data = await self._collect_stats('Общий')
@@ -205,7 +218,6 @@ class CodeRunRatingScraper:
                     except DataCollectionError as e:
                         raise DataCollectionError(f"Не удалось обработать общий зачет: {str(e)}")
                 
-                # Собираем данные по языкам программирования
                 for lang in self.languages:
                     try:
                         lang_data = await self._collect_stats(lang)
@@ -221,6 +233,10 @@ class CodeRunRatingScraper:
         finally:
             self._is_updating = False
 
+    def get_data(self) -> pd.DataFrame:
+        """Возвращает текущий DataFrame с рейтингом."""
+        return self.df.copy()
+    
     def save(
         self,
         filename: str = None,
