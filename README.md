@@ -84,8 +84,8 @@ python3 -m core
 ## 📊 Примеры работы  
 ### Распределение по языкам:
 `/user_by_lang`\
-<img src="misk/user_lang_bar.png" width="45%"> 
-<img src="misk/user_lang_bar.png" width="45%">  
+<img src="misk/user_lang_bar.png" width="50%"> 
+<img src="misk/user_lang_pie.png" width="50%">  
 
 ### Распределение по кол-ву используемых языков: 
 `/langcnt_by_user`\
